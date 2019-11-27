@@ -8,6 +8,8 @@ app.use(body.json());
 app.use(cors());
 const crypto = require('crypto');
 var path = require("path");
+const jwt = require("jsonwebtoken");
+
 
 //Database Connection
 const dbcon='mongodb+srv://Auction:model@auction-ujxcw.mongodb.net/test?retryWrites=true&w=majority';
@@ -25,25 +27,28 @@ var test = new mongoose.Schema({
     email: {type: String, required: true ,unique: true},
     username: {type: String, required: true},
     password:{type: String, required: true},
+    token: String,
     
     
 });
 var check = mongoose.model("Test", test);
 
 // Used for view ejs 
-app.get('/test',(req,res)=>{
+app.get('/me',auth,(req,res)=>{
+//  const check =  req.header("token");
+//  console.log(check);
 
-//res.render('first.ejs')
 })
 // Post route for register
-app.post('/test',(req,res)=>{
+app.post('/register',(req,res)=>{
     // have the same name when using the postman for data entry 
-    let {first, second, third} = req.body;
-    //Hash for password
-    const hashpass = crypto.scryptSync('aes-192-cbc', third,24);
+    let {email, username, password} = req.body;
+    
+    //generating the Hash for password
+    const hashpass = crypto.scryptSync('aes-192-cbc', password,24);
     console.log(hashpass);
     // Find if the email is same or not
-    check.findOne({email: first},(err,data)=>{
+    check.findOne({email: email},(err,data)=>{
         if(err) console.log(err);
         if(data){
             res.status(404).json({
@@ -53,7 +58,7 @@ app.post('/test',(req,res)=>{
         }
         // If not save the data into database
         else {
-            var testing = new check({email: first,username: second, password:hashpass});
+            var testing = new check({email: email,username: username, password:hashpass});
             testing.save(function(err,data){
                 if (err) console.log(err);
                 else{
@@ -77,9 +82,32 @@ app.post('/test',(req,res)=>{
         check.findOne({email: emailtemp, password: hashpass}, (err,data)=>{
             if(err) console.log(err);
             if (data){
-                return res.status(200).json({
-                    message: "Login Successfully"
+                //JWT FUNCTION For generating tokens
+                // const token = jwt.sign({
+                //     email: data.email,
+                //     username: data.username
+                // },"testing");
+                // return res.status(200).json({
+                //     message: "Login Successfully",
+                //     token: token
+                // })
+
+                // Generating random numbers
+                let string =  Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                // Checking and updating the token in the database
+                check.updateOne({email: data.email}, {token:string},(err,data)=>{
+                    if (err) console.log(err);
+                    else{
+                       
+                        return res.status(200).json({
+                            message: "Login Successfully",
+                            token: string
+                        })
+
+                    }
                 })
+                
+                
                 console.log('Login successfully', data);
 
             }
@@ -90,6 +118,57 @@ app.post('/test',(req,res)=>{
             }
         })
     })
+
+    // middleware for getting the value from the header
+    function auth(req,res,next){
+        const token1 = req.header('auth-token');
+       
+        if(!token1){
+            return res.status(403).json({
+                        message: "access denied"
+                    })
+        }
+        if(token1){
+            check.findOne({token: token1}, (err,data)=>{
+                if(data){
+                    res.status(200).json({
+                        email: data.email,
+                        username: data.username,
+                    })
+                }
+                else{
+                    res.status(401).json({
+                        message: 'Invalid Token'
+                    })
+                }
+                
+            })
+            next();
+        }
+
+        
+        //JWT token verification using the header's 
+        // if (!token){
+        //     return res.status(401).json({
+        //         message: "access denied"
+        //     })
+        // }
+        // else{
+        //     const verfied=jwt.verify(token,"testing");
+        //     const bearer = token.split(" ");
+        //     const bearer_token=bearer[1];
+            
+        //     req.token=bearer_token;
+            
+        //     res.json({
+        //         data:bearer,
+        //         data1: verfied
+        //     })
+            
+        //}
+        
+        
+    }
 
 // Server for local host
 app.listen(8080, ()=>{
